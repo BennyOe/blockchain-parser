@@ -1,5 +1,4 @@
-Blockchain parser
-=================
+# Blockchain parser to JSON
 
 **Author:** Denis Leonov <466611@gmail.com>
 
@@ -17,7 +16,7 @@ No dependencies, no third-parties modules or libs needed. Just install Python st
 
 Make sure you change the paths for **blkXXXXX.dat** files and for the parsing results to yours.
 
-This script convert the full blockchain raw database that is stored in **blkXXXXX.dat** files to the simple **txt** view.
+This script convert the full blockchain raw database that is stored in **blkXXXXX.dat** files to JSON.
 
 **If this was helpfull for you, don't hesistate to make a donations!!!**
 
