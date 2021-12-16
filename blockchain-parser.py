@@ -7,6 +7,8 @@
 import os
 import datetime
 import hashlib
+import json
+
 
 def reverse(input):
     L = len(input)
@@ -19,43 +21,53 @@ def reverse(input):
             T = input[i*2] + input[i*2+1]
             Res = T + Res
             T = ''
-        return (Res);
+        return (Res)
 
-def merkle_root(lst): # https://gist.github.com/anonymous/7eb080a67398f648c1709e41890f8c44
-    sha256d = lambda x: hashlib.sha256(hashlib.sha256(x).digest()).digest()
-    hash_pair = lambda x, y: sha256d(x[::-1] + y[::-1])[::-1]
-    if len(lst) == 1: return lst[0]
+
+def merkle_root(lst):  # https://gist.github.com/anonymous/7eb080a67398f648c1709e41890f8c44
+    def sha256d(x): return hashlib.sha256(hashlib.sha256(x).digest()).digest()
+    def hash_pair(x, y): return sha256d(x[::-1] + y[::-1])[::-1]
+    if len(lst) == 1:
+        return lst[0]
     if len(lst) % 2 == 1:
         lst.append(lst[-1])
-    return merkle_root([hash_pair(x,y) for x, y in zip(*[iter(lst)]*2)])
+    return merkle_root([hash_pair(x, y) for x, y in zip(*[iter(lst)]*2)])
 
-def read_bytes(file,n,byte_order = 'L'):
+
+def read_bytes(file, n, byte_order='L'):
     data = file.read(n)
     if byte_order == 'L':
         data = data[::-1]
     data = data.hex().upper()
     return data
 
+
 def read_varint(file):
     b = file.read(1)
-    bInt = int(b.hex(),16)
+    bInt = int(b.hex(), 16)
     c = 0
     data = ''
     if bInt < 253:
         c = 1
         data = b.hex().upper()
-    if bInt == 253: c = 3
-    if bInt == 254: c = 5
-    if bInt == 255: c = 9
-    for j in range(1,c):
+    if bInt == 253:
+        c = 3
+    if bInt == 254:
+        c = 5
+    if bInt == 255:
+        c = 9
+    for j in range(1, c):
         b = file.read(1)
         b = b.hex().upper()
         data = b + data
     return data
 
-dirA = 'e:/_blocks/' # Directory where blk*.dat files are stored
+
+# Directory where blk*.dat files are stored
+dirA = '/home/benni/StudioWork/dogecoin/test/'
 #dirA = sys.argv[1]
-dirB = 'e:/_result/' # Directory where to save parsing results
+# Directory where to save parsing results
+dirB = '/home/benni/StudioWork/dogecoin/test/results'
 #dirA = sys.argv[2]
 
 fList = os.listdir(dirA)
@@ -64,62 +76,68 @@ fList.sort()
 
 for i in fList:
     nameSrc = i
-    nameRes = nameSrc.replace('.dat','.txt')
+    nameRes = nameSrc.replace('.dat', '.txt')
     resList = []
+    resJson = {
+        # "tx hash": {
+        #     }
+        # ]
+        # }
+    }
     a = 0
     t = dirA + nameSrc
-    resList.append('Start ' + t + ' in ' + str(datetime.datetime.now()))
-    print ('Start ' + t + ' in ' + str(datetime.datetime.now()))
-    f = open(t,'rb')
+    f = open(t, 'rb')
     tmpHex = ''
     fSize = os.path.getsize(t)
     while f.tell() != fSize:
-        tmpHex = read_bytes(f,4)
-        resList.append('Magic number = ' + tmpHex)
-        tmpHex = read_bytes(f,4)
-        resList.append('Block size = ' + tmpHex)
+        magicNumber = read_bytes(f, 4)
+        blockSize = read_bytes(f, 4)
         tmpPos3 = f.tell()
-        tmpHex = read_bytes(f,80,'B')
-        tmpHex = bytes.fromhex(tmpHex)
-        tmpHex = hashlib.new('sha256', tmpHex).digest()
-        tmpHex = hashlib.new('sha256', tmpHex).digest()
-        tmpHex = tmpHex[::-1]        
-        tmpHex = tmpHex.hex().upper()
-        resList.append('SHA256 hash of the current block hash = ' + tmpHex)
-        f.seek(tmpPos3,0)
-        tmpHex = read_bytes(f,4)
-        resList.append('Version number = ' + tmpHex)
-        tmpHex = read_bytes(f,32)
-        resList.append('SHA256 hash of the previous block hash = ' + tmpHex)
-        tmpHex = read_bytes(f,32)
-        resList.append('MerkleRoot hash = ' + tmpHex)
-        MerkleRoot = tmpHex
-        tmpHex = read_bytes(f,4)
-        resList.append('Time stamp = ' + tmpHex)
-        tmpHex = read_bytes(f,4)
-        resList.append('Difficulty = ' + tmpHex)
-        tmpHex = read_bytes(f,4)
-        resList.append('Random number = ' + tmpHex)
-        tmpHex = read_varint(f)
-        txCount = int(tmpHex,16)
-        resList.append('Transactions count = ' + str(txCount))
-        resList.append('')
-        tmpHex = ''; RawTX = ''; tx_hashes = []
+        hash = read_bytes(f, 80, 'B')
+        hash = bytes.fromhex(hash)
+        hash = hashlib.new('sha256', hash).digest()
+        hash = hashlib.new('sha256', hash).digest()
+        hash = hash[::-1]
+        hash = hash.hex().upper()
+        f.seek(tmpPos3, 0)
+        versionNumber = read_bytes(f, 4)
+        previousBlockHash = read_bytes(f, 32)
+        merkleRootHash = read_bytes(f, 32)
+        MerkleRoot = merkleRootHash
+        timeStamp = read_bytes(f, 4)
+        difficulty = read_bytes(f, 4)
+        randomNumber = read_bytes(f, 4)
+        transactionCount = read_varint(f)
+        txCount = int(transactionCount, 16)
+        resJson[str(hash)] = {'magicNumber': str(magicNumber),
+                              'blockSize': str(blockSize),
+                              "versionNumber": str(versionNumber),
+                              "previousBlockHash": str(previousBlockHash),
+                              "merkleRootHash": str(merkleRootHash),
+                              "timeStamp": str(timeStamp),
+                              "difficulty": str(difficulty),
+                              "randomNumber": str(randomNumber),
+                              "transactionCount": str(transactionCount),
+                              "transactions": [],
+                              }
+        tmpHex = ''
+        RawTX = ''
+        tx_hashes = []
         for k in range(txCount):
-            tmpHex = read_bytes(f,4)
-            resList.append('TX version number = ' + tmpHex)
-            RawTX = reverse(tmpHex)
+            txVersionNumber = read_bytes(f, 4)
+            print('TX version number = ' + txVersionNumber)
+            RawTX = reverse(txVersionNumber)
             tmpHex = ''
             Witness = False
             b = f.read(1)
             tmpB = b.hex().upper()
-            bInt = int(b.hex(),16)
+            bInt = int(b.hex(), 16)
             if bInt == 0:
                 tmpB = ''
-                f.seek(1,1)
+                f.seek(1, 1)
                 c = 0
                 c = f.read(1)
-                bInt = int(c.hex(),16)
+                bInt = int(c.hex(), 16)
                 tmpB = c.hex().upper()
                 Witness = True
             c = 0
@@ -127,127 +145,155 @@ for i in fList:
                 c = 1
                 tmpHex = hex(bInt)[2:].upper().zfill(2)
                 tmpB = ''
-            if bInt == 253: c = 3
-            if bInt == 254: c = 5
-            if bInt == 255: c = 9
-            for j in range(1,c):
+            if bInt == 253:
+                c = 3
+            if bInt == 254:
+                c = 5
+            if bInt == 255:
+                c = 9
+            for j in range(1, c):
                 b = f.read(1)
                 b = b.hex().upper()
                 tmpHex = b + tmpHex
-            inCount = int(tmpHex,16)
-            resList.append('Inputs count = ' + tmpHex)
+            inCount = int(tmpHex, 16)
+            inputCount = tmpHex
             tmpHex = tmpHex + tmpB
             RawTX = RawTX + reverse(tmpHex)
+            txJson = {
+                "txVersionNumber": str(txVersionNumber),
+                "inputCount": str(inputCount),
+            }
             for m in range(inCount):
-                tmpHex = read_bytes(f,32)
-                resList.append('TX from hash = ' + tmpHex)
-                RawTX = RawTX + reverse(tmpHex)
-                tmpHex = read_bytes(f,4)                
-                resList.append('N output = ' + tmpHex)
-                RawTX = RawTX + reverse(tmpHex)
+                txFromHash = read_bytes(f, 32)
+                txJson['txFromHash' + str(m)] = str(txFromHash)
+                RawTX = RawTX + reverse(txFromHash)
+
+                nOutput = read_bytes(f, 4)
+                txJson['nOutput' + str(m)] = str(nOutput)
+                RawTX = RawTX + reverse(nOutput)
+
                 tmpHex = ''
                 b = f.read(1)
                 tmpB = b.hex().upper()
-                bInt = int(b.hex(),16)
+                bInt = int(b.hex(), 16)
                 c = 0
                 if bInt < 253:
                     c = 1
                     tmpHex = b.hex().upper()
                     tmpB = ''
-                if bInt == 253: c = 3
-                if bInt == 254: c = 5
-                if bInt == 255: c = 9
-                for j in range(1,c):
+                if bInt == 253:
+                    c = 3
+                if bInt == 254:
+                    c = 5
+                if bInt == 255:
+                    c = 9
+                for j in range(1, c):
                     b = f.read(1)
                     b = b.hex().upper()
                     tmpHex = b + tmpHex
-                scriptLength = int(tmpHex,16)
+                scriptLength = int(tmpHex, 16)
                 tmpHex = tmpHex + tmpB
                 RawTX = RawTX + reverse(tmpHex)
-                tmpHex = read_bytes(f,scriptLength,'B')
-                resList.append('Input script = ' + tmpHex)
-                RawTX = RawTX + tmpHex
-                tmpHex = read_bytes(f,4,'B')
-                resList.append('Sequence number = ' + tmpHex)
-                RawTX = RawTX + tmpHex
+                inputScript = read_bytes(f, scriptLength, 'B')
+                txJson['inputScript' + str(m)] = str(inputScript)
+                RawTX = RawTX + inputScript
+
+                sequenceNumber = read_bytes(f, 4, 'B')
+                txJson['sequenceNumber' + str(m)] = str(sequenceNumber)
+                RawTX = RawTX + sequenceNumber
+
                 tmpHex = ''
             b = f.read(1)
             tmpB = b.hex().upper()
-            bInt = int(b.hex(),16)
+            bInt = int(b.hex(), 16)
             c = 0
             if bInt < 253:
                 c = 1
                 tmpHex = b.hex().upper()
                 tmpB = ''
-            if bInt == 253: c = 3
-            if bInt == 254: c = 5
-            if bInt == 255: c = 9
-            for j in range(1,c):
+            if bInt == 253:
+                c = 3
+            if bInt == 254:
+                c = 5
+            if bInt == 255:
+                c = 9
+            for j in range(1, c):
                 b = f.read(1)
                 b = b.hex().upper()
                 tmpHex = b + tmpHex
-            outputCount = int(tmpHex,16)
+            outputCount = int(tmpHex, 16)
             tmpHex = tmpHex + tmpB
-            resList.append('Outputs count = ' + str(outputCount))
+            txJson['outputCount'] = str(outputCount)
+
             RawTX = RawTX + reverse(tmpHex)
             for m in range(outputCount):
-                tmpHex = read_bytes(f,8)
+                tmpHex = read_bytes(f, 8)
                 Value = tmpHex
                 RawTX = RawTX + reverse(tmpHex)
                 tmpHex = ''
                 b = f.read(1)
                 tmpB = b.hex().upper()
-                bInt = int(b.hex(),16)
+                bInt = int(b.hex(), 16)
                 c = 0
                 if bInt < 253:
                     c = 1
                     tmpHex = b.hex().upper()
                     tmpB = ''
-                if bInt == 253: c = 3
-                if bInt == 254: c = 5
-                if bInt == 255: c = 9
-                for j in range(1,c):
+                if bInt == 253:
+                    c = 3
+                if bInt == 254:
+                    c = 5
+                if bInt == 255:
+                    c = 9
+                for j in range(1, c):
                     b = f.read(1)
                     b = b.hex().upper()
                     tmpHex = b + tmpHex
-                scriptLength = int(tmpHex,16)
+                scriptLength = int(tmpHex, 16)
                 tmpHex = tmpHex + tmpB
                 RawTX = RawTX + reverse(tmpHex)
-                tmpHex = read_bytes(f,scriptLength,'B')
-                resList.append('Value = ' + Value)
-                resList.append('Output script = ' + tmpHex)
-                RawTX = RawTX + tmpHex
+                outputScript = read_bytes(f, scriptLength, 'B')
+                txJson['outputValue' + str(m)] = str(Value)
+                txJson['outputScript' + str(m)] = str(outputScript)
+                RawTX = RawTX + outputScript
+
                 tmpHex = ''
             if Witness == True:
                 for m in range(inCount):
                     tmpHex = read_varint(f)
-                    WitnessLength = int(tmpHex,16)
+                    WitnessLength = int(tmpHex, 16)
                     for j in range(WitnessLength):
                         tmpHex = read_varint(f)
-                        WitnessItemLength = int(tmpHex,16)
-                        tmpHex = read_bytes(f,WitnessItemLength)
-                        resList.append('Witness ' + str(m) + ' ' + str(j) + ' ' + str(WitnessItemLength) + ' ' + tmpHex)
+                        WitnessItemLength = int(tmpHex, 16)
+                        tmpHex = read_bytes(f, WitnessItemLength)
+                        txJson['Witness' + str(m) + str(j)
+                               ] = str(WitnessItemLength) + tmpHex
                         tmpHex = ''
             Witness = False
-            tmpHex = read_bytes(f,4)
-            resList.append('Lock time = ' + tmpHex)
-            RawTX = RawTX + reverse(tmpHex)
+            lockTime = read_bytes(f, 4)
+            txJson['lockTime'] = str(lockTime)
+            RawTX = RawTX + reverse(lockTime)
+
             tmpHex = RawTX
             tmpHex = bytes.fromhex(tmpHex)
             tmpHex = hashlib.new('sha256', tmpHex).digest()
             tmpHex = hashlib.new('sha256', tmpHex).digest()
             tmpHex = tmpHex[::-1]
-            tmpHex = tmpHex.hex().upper()
-            resList.append('TX hash = ' + tmpHex)
-            tx_hashes.append(tmpHex)
-            resList.append(''); tmpHex = ''; RawTX = ''
+            txHash = tmpHex.hex().upper()
+
+            tx_hashes.append(txHash)
+            resJson[str(hash)]['transactions'].append({str(txHash): txJson})
+            tmpHex = ''
+            RawTX = ''
         a += 1
         tx_hashes = [bytes.fromhex(h) for h in tx_hashes]
         tmpHex = merkle_root(tx_hashes).hex().upper()
         if tmpHex != MerkleRoot:
-            print ('Merkle roots does not match! >',MerkleRoot,tmpHex)
+            print('Merkle roots does not match! >', MerkleRoot, tmpHex)
+        # Db call
+        print(resJson)
     f.close()
-    f = open(dirB + nameRes,'w')
-    for j in resList:
-        f.write(j + '\n')
+    f = open(dirB + nameRes, 'w')
+    # for j in resList:
+    #     f.write(j + '\n')
     f.close()
