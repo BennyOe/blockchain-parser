@@ -5,9 +5,15 @@
 #
 
 import os
-import datetime
 import hashlib
-import json
+import time
+from sys import exit
+
+from pymongo import MongoClient
+client = MongoClient()
+
+db = client.db
+collection = db.doge
 
 
 def reverse(input):
@@ -65,9 +71,9 @@ def read_varint(file):
 
 # Directory where blk*.dat files are stored
 dirA = '/home/benni/StudioWork/dogecoin/test/'
-#dirA = sys.argv[1]
+# dirA = sys.argv[1]
 # Directory where to save parsing results
-dirB = '/home/benni/StudioWork/dogecoin/test/results'
+dirB = '/home/benni/StudioWork/dogecoin/test/results/'
 #dirA = sys.argv[2]
 
 fList = os.listdir(dirA)
@@ -75,7 +81,9 @@ fList = [x for x in fList if (x.endswith('.dat') and x.startswith('blk'))]
 fList.sort()
 
 for i in fList:
+    start_time = time.time()
     nameSrc = i
+    print("At file: " + nameSrc)
     nameRes = nameSrc.replace('.dat', '.txt')
     resList = []
     resJson = {
@@ -109,23 +117,25 @@ for i in fList:
         randomNumber = read_bytes(f, 4)
         transactionCount = read_varint(f)
         txCount = int(transactionCount, 16)
-        resJson[str(hash)] = {'magicNumber': str(magicNumber),
-                              'blockSize': str(blockSize),
-                              "versionNumber": str(versionNumber),
-                              "previousBlockHash": str(previousBlockHash),
-                              "merkleRootHash": str(merkleRootHash),
-                              "timeStamp": str(timeStamp),
-                              "difficulty": str(difficulty),
-                              "randomNumber": str(randomNumber),
-                              "transactionCount": str(transactionCount),
-                              "transactions": [],
-                              }
+        # resJson[str(hash)] = {'blockHash': str(hash),
+        #                       'magicNumber': str(magicNumber),
+        #                       'blockSize': str(blockSize),
+        #                       "versionNumber": str(versionNumber),
+        #                       "previousBlockHash": str(previousBlockHash),
+        #                       "merkleRootHash": str(merkleRootHash),
+        #                       "timeStamp": str(timeStamp),
+        #                       "difficulty": str(difficulty),
+        #                       "randomNumber": str(randomNumber),
+        #                       "transactionCount": str(transactionCount),
+        #                       "transactions": [],
+        #                       }
         tmpHex = ''
         RawTX = ''
         tx_hashes = []
+        transactions = []
         for k in range(txCount):
             txVersionNumber = read_bytes(f, 4)
-            print('TX version number = ' + txVersionNumber)
+            # print('TX version number = ' + txVersionNumber)
             RawTX = reverse(txVersionNumber)
             tmpHex = ''
             Witness = False
@@ -159,10 +169,19 @@ for i in fList:
             inputCount = tmpHex
             tmpHex = tmpHex + tmpB
             RawTX = RawTX + reverse(tmpHex)
-            txJson = {
-                "txVersionNumber": str(txVersionNumber),
-                "inputCount": str(inputCount),
-            }
+            txJson = {'blockHash': str(hash),
+                      'magicNumber': str(magicNumber),
+                      'blockSize': str(blockSize),
+                      "versionNumber": str(versionNumber),
+                      "previousBlockHash": str(previousBlockHash),
+                      "merkleRootHash": str(merkleRootHash),
+                      "timeStamp": str(timeStamp),
+                      "difficulty": str(difficulty),
+                      "randomNumber": str(randomNumber),
+                      "transactionCount": str(transactionCount),
+                      "txVersionNumber": str(txVersionNumber),
+                      "inputCount": str(inputCount),
+                      }
             for m in range(inCount):
                 txFromHash = read_bytes(f, 32)
                 txJson['txFromHash' + str(m)] = str(txFromHash)
@@ -226,6 +245,7 @@ for i in fList:
             txJson['outputCount'] = str(outputCount)
 
             RawTX = RawTX + reverse(tmpHex)
+            totalValue = 0
             for m in range(outputCount):
                 tmpHex = read_bytes(f, 8)
                 Value = tmpHex
@@ -256,8 +276,10 @@ for i in fList:
                 txJson['outputValue' + str(m)] = str(Value)
                 txJson['outputScript' + str(m)] = str(outputScript)
                 RawTX = RawTX + outputScript
+                totalValue += int(Value, 16)
 
                 tmpHex = ''
+            txJson['txTotalValue'] = str(totalValue)
             if Witness == True:
                 for m in range(inCount):
                     tmpHex = read_varint(f)
@@ -282,7 +304,9 @@ for i in fList:
             txHash = tmpHex.hex().upper()
 
             tx_hashes.append(txHash)
-            resJson[str(hash)]['transactions'].append({str(txHash): txJson})
+            txJson['txHash'] = txHash
+            transactions.append(txJson)
+            # resJson[str(hash)]['transactions'].append({str(txHash): txJson})
             tmpHex = ''
             RawTX = ''
         a += 1
@@ -290,10 +314,18 @@ for i in fList:
         tmpHex = merkle_root(tx_hashes).hex().upper()
         if tmpHex != MerkleRoot:
             print('Merkle roots does not match! >', MerkleRoot, tmpHex)
+            exit(1)
+        post_id = collection.insert_many(transactions)
+        # import pprint
+        # pprint.pprint(transactions)
         # Db call
-        print(resJson)
+        # print(str(resJson) + '\n')
     f.close()
-    f = open(dirB + nameRes, 'w')
-    # for j in resList:
-    #     f.write(j + '\n')
-    f.close()
+    end_time = time.time()
+
+    time_elapsed = (end_time - start_time)
+    print(time_elapsed)
+    # f = open(dirB + nameRes, 'w')
+    # for (k, v) in resJson.items():
+    #     f.write(k + ': ' + str(v) + '\n')
+    # f.close()
